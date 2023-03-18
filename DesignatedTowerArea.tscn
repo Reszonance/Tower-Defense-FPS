@@ -1,0 +1,21 @@
+[gd_scene load_steps=3 format=2]
+
+[sub_resource type="SphereMesh" id=2]
+radius = 3.0
+height = 6.0
+
+[sub_resource type="CapsuleShape" id=3]
+radius = 4.07796
+height = 0.002
+
+[node name="DesignatedTowerArea" type="Area"]
+
+[node name="MeshInstance" type="MeshInstance" parent="."]
+mesh = SubResource( 2 )
+
+[node name="CollisionShape" type="CollisionShape" parent="."]
+transform = Transform( 1, 0, 0, 0, -4.37114e-08, 1, 0, -1, -4.37114e-08, 0, 0, 0 )
+shape = SubResource( 3 )
+
+[connection signal="body_entered" from="." to="." method="_on_DesignatedTowerArea_body_entered"]
+[connection signal="body_exited" from="." to="." method="_on_DesignatedTowerArea_body_exited"]
