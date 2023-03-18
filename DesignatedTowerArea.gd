@@ -16,3 +16,4 @@ func _on_DesignatedTowerArea_body_exited(body):
 	if body == Tower:
 		canPlace  = false
 	print(canPlace)
+	print("Placed tower")
