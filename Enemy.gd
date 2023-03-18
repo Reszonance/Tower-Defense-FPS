@@ -2,21 +2,31 @@ extends KinematicBody
 
 #used as a state varible that updates wether it is being dragged or not
 var x = false
-export var GroundPath: NodePath
-onready var Ground = get_node(GroundPath)
+var Ground 
 
-export var DesignatedAreaPath: NodePath
-onready var DesignatedArea = get_node(DesignatedAreaPath)
+signal thisCanBeDragged
+signal StopDragging
+
 var curArea = null
 
+var towerIsPlaced = false
 var canPlace = false
 
+
+func _ready():
+	var cameraMain = get_node("../CameraPivot/Camera")
+	connect("thisCanBeDragged", cameraMain, "addToDrag", [self])
+	emit_signal("thisCanBeDragged")
+	connect("StopDragging", cameraMain, "drop")
+	Ground = get_node("../Ground")
+	
 #these functions execute when the signal is sent from main
 func on_Drag():
+	print("hihihihi")
 	x = true
 
 func on_Stop_Drag():
-	
+	emit_signal("StopDragging")
 	x = false
 	if canPlace:
 		translation = Vector3(curArea.translation.x, 3, curArea.translation.z)
@@ -41,18 +51,9 @@ func ScreenPointToRay():
 	
 	var rayArray = spaceState.intersect_ray(rayOrigin, rayEnd)
 	if rayArray.get("collider") == Ground:
+		
 		return rayArray["position"]
 	else:
 		return self.translation
 
 
-
-func _on_Area_area_entered(area):
-	if area == DesignatedArea:
-		canPlace = true
-		curArea = area
-
-
-func _on_Area_area_exited(area):
-	if area == DesignatedArea:
-		canPlace = false

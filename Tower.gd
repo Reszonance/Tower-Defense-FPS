@@ -2,29 +2,47 @@ extends KinematicBody
 
 #used as a state varible that updates wether it is being dragged or not
 var x = false
-export var GroundPath: NodePath
-onready var Ground = get_node(GroundPath)
+var Ground
 
-export var DesignatedAreaPath: NodePath
-onready var DesignatedArea = get_node(DesignatedAreaPath)
+signal thisCanBeDragged
+signal StopDragging
+
 var curArea = null
 
 var canPlace = false
-var towerIsPlaced = false
+var towerIsPlaced = true
 
 var towerRaycast = null
 var currentTarget = null
 var enemies = []
-var enemiesInRange = 0
+var enemiesInRange = []
+
+var curDist = 9999999
+var minDist = float("1e5")
+var enemyToTarget = null
 
 
 
 
 func _ready():
+	
+	var cameraMain = get_node("../CameraPivot/Camera")
+	connect("thisCanBeDragged", cameraMain, "addToDrag", [self])
+	emit_signal("thisCanBeDragged")
+	connect("StopDragging", cameraMain, "drop")
+	
+	Ground = get_node("../Ground")
+	
+	
+	
+	
+	
 	# Don't detect collisions with the turret itself
 	towerRaycast = $GunBarrel/RayCast
 	towerRaycast.add_exception(self)
 	towerRaycast.enabled = false
+	
+	
 
 	# Add all enemies to the enemies array
 	for enemy in get_tree().get_nodes_in_group("enemies"):
@@ -32,47 +50,71 @@ func _ready():
 
 #these functions execute when the signal is sent from main
 func on_Drag():
+	canPlace = true
+	print("its working")
 	x = true
 	towerIsPlaced = false
+	$Area/MeshInstance.visible = true
 
 func on_Stop_Drag():
-	x = false
 	if canPlace:
-		translation = Vector3(curArea.translation.x, 3, curArea.translation.z)
+		emit_signal("StopDragging")
+		
 		towerIsPlaced = true
+		x = false
+		$Area/MeshInstance.visible = false
 		
 		# If there is an enemy in range, lock onto the closest one
-		if enemiesInRange > 0:
-			LockOnClosestEnemy()
+		#if enemiesInRange > 0:
+		#	LockOnClosestEnemy()
 	else:
 		towerIsPlaced = false
+		
 	
 #updates tower translation to go with mouse
 func _process(fl):
 	if x == true:
+		
 		var newPos = ScreenPointToRay()
 		self.translation = Vector3(newPos.x, 3, newPos.z)
 		
+	
 	# Check if there is a current target and the raycast is enabled
-	if currentTarget and towerRaycast.enabled:
-		# Check if the raycast intersects the current target
-		var raycastCollider = towerRaycast.get_collider()
+	if enemiesInRange.size() > 0 && towerIsPlaced:
 		
-		if (raycastCollider) and (raycastCollider == currentTarget):
-			# Shoot at enemy
-			print("shooting enemy")
-			pass
+		if currentTarget:
+			var direction = (currentTarget.global_transform.origin - self.global_transform.origin).normalized()
+			look_at(currentTarget.translation, Vector3(0, 1, 0))
+			
 			
 		else:
-			# The target is no longer in range, disable the raycast and clear the current target
-			towerRaycast.enabled = false
-			currentTarget = null
-			print("stopped shooting at enemy")
+			print("searching for new target")
+			for i in enemiesInRange:
+				curDist = EuclideanDist(self.translation, i.translation)
+				if curDist < minDist:
+					minDist = curDist
+					enemyToTarget = i
+			currentTarget = enemyToTarget
+			
+			
+		
+		towerRaycast.enabled = true
+		# Check if the raycast intersects the current target
+		#var raycastCollider = towerRaycast.get_collider()
+		#LockOnClosestEnemy()
+	else:
+		towerRaycast.enabled = false
+		currentTarget = null
+	
 
 	
+func EuclideanDist(p1: Vector3, p2: Vector3):
+	var x = (p2.x - p1.x)*(p2.x - p1.x)
+	var y = (p2.y - p1.y)*(p2.y - p1.y)
+	var z = (p2.z - p1.z)*(p2.z - p1.z)
+	return sqrt(x+y+z)
 #function used to get the mouse position in 3d
 func ScreenPointToRay():
-	
 	#just more rays
 	var spaceState = get_world().direct_space_state
 	var mouse_pos = get_viewport().get_mouse_position()
@@ -89,74 +131,42 @@ func ScreenPointToRay():
 
 
 func _on_Area_area_entered(area):
-	if area == DesignatedArea:
-		canPlace = true
-		curArea = area
+	print(area)
+	canPlace = false
+		
 
 
 func _on_Area_area_exited(area):
-	if area == DesignatedArea:
-		canPlace = false
+	print(area)
+	canPlace = true
 
 
 func _on_TowerRange_body_entered(body):
 	# Enable the raycast and set its position and target to the barrel
 	if body in enemies:
 		print("enemy detected!")
-		currentTarget = body
-		LockOnClosestEnemy()
-		enemiesInRange += 1
+		
+		#currentTarget = body
+		enemiesInRange.append(body)
+		print(enemiesInRange)
 
 
 func _on_TowerRange_body_exited(body):
 	# Disable the raycast and clear the current target
 	if body == currentTarget:
 		print("enemy not in range anymore!")
-		towerRaycast.enabled = false
+		#towerRaycast.enabled = false
+		enemiesInRange.erase(body)
 		currentTarget = null
-		enemiesInRange -= 1
-
-
-func LockOnClosestEnemy():
-	# Only lock on if the tower has been placed
-	if towerIsPlaced == false:
-		print("tower hasn't been placed")
-		return
-	print("tower placed")
-	# Get the closest enemy within range
-	var closestEnemy = null
-	var closestDistance = 9999999 # Set a large initial value
-
-	for enemy in enemies:
-		var distance = (enemy.global_transform.origin - self.global_transform.origin).length()
-		if distance < closestDistance:
-			closestDistance = distance
-			closestEnemy = enemy
+		minDist = 999999
+		
+		
+		
+	if body in enemies:
+		print("an enemy left tower range")
+		enemiesInRange.erase(body)
+		
 	
-	# Check if tower can lock onto the closest enemy
-	if closestEnemy:
-		print("Enemies in Range: ", enemiesInRange)
-		print("locking onto enemy!")
-		
-		# Get the direction towards the enemy
-		var direction = (closestEnemy.global_transform.origin - self.global_transform.origin).normalized()
+	
 
-		# Calculate the rotation towards the enemy
-		var up = Vector3.UP
-		var right = direction.cross(up).normalized()
-		up = right.cross(direction).normalized()
-		var targetRotation = Basis(right, up, direction)
 
-		# Set the rotation of the tower towards the enemy
-		self.global_transform.basis = targetRotation
-		
-		# Enable the raycast and set its position and target to the barrel
-		towerRaycast.enabled = true
-		towerRaycast.global_transform.origin = $GunBarrel.global_transform.origin
-		towerRaycast.look_at(closestEnemy.global_transform.origin, Vector3(0, 1, 0))
-		
-	else:
-		# No enemies within range, disable the raycast and clear the current target
-		print("no enemies in range!")
-		towerRaycast.enabled = false
-		currentTarget = null
